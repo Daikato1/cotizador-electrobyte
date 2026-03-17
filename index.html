@@ -826,7 +826,7 @@ Si no hay actualizaciones o nuevos productos, usa arrays vacíos.`;
       }],
       generationConfig: {
         temperature: 0.1,
-        maxOutputTokens: 4096
+        maxOutputTokens: 8192
       }
     };
 
@@ -858,7 +858,11 @@ Si no hay actualizaciones o nuevos productos, usa arrays vacíos.`;
 
     // Limpiar posibles backticks o markdown que Gemini a veces agrega
     var clean = rawText.replace(/```json|```/g,'').trim();
-    var result = JSON.parse(clean);
+    
+    // Extraer solo el objeto JSON si hay texto extra alrededor
+    var jsonMatch = clean.match(/\{[\s\S]*\}/);
+    if(!jsonMatch) throw new Error('Gemini no devolvió un JSON válido. Intenta de nuevo.');
+    var result = JSON.parse(jsonMatch[0]);
 
     iaSugerencias = result.actualizaciones || [];
     iaNuevos = result.nuevos || [];
