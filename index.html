@@ -768,46 +768,18 @@ async function analizarConIA(){
 
   var prompt = `Eres un asistente especializado en actualización de catálogos de precios para una empresa de tecnología e IT en Colombia llamada ELECTROBYTE IT S.A.S.
 
-Se te proporciona:
-1. El catálogo actual de productos de la empresa (JSON)
-2. Un documento de lista de precios de un proveedor (puede ser PDF o Excel)
-
-CATÁLOGO ACTUAL:
+CATÁLOGO ACTUAL (JSON):
 ${catalogoStr}
 
-TU TAREA:
-- Analiza el documento del proveedor
-- Identifica qué productos del documento coinciden (exacta o aproximadamente) con productos del catálogo actual
-- Para cada coincidencia, sugiere si el precio debe actualizarse
-- También identifica productos NUEVOS en el documento que no están en el catálogo
+TAREA: Analiza el documento del proveedor adjunto e identifica coincidencias con el catálogo.
 
-${instrExtra ? 'INSTRUCCIÓN ADICIONAL DEL USUARIO: ' + instrExtra : ''}
+${instrExtra ? 'INSTRUCCIÓN ADICIONAL: ' + instrExtra : ''}
 
-RESPONDE ÚNICAMENTE con un objeto JSON válido con esta estructura exacta (sin texto adicional, sin markdown, sin backticks):
-{
-  "resumen": "Texto breve explicando lo encontrado en el documento",
-  "actualizaciones": [
-    {
-      "id": 1,
-      "name": "Nombre del producto en catálogo",
-      "precio_actual": 2800,
-      "precio_sugerido": 3200,
-      "razon": "Precio encontrado en lista del proveedor",
-      "confianza": "alta"
-    }
-  ],
-  "nuevos": [
-    {
-      "name": "Nombre del producto nuevo",
-      "cat": "Categoría sugerida",
-      "precio_sugerido": 45000,
-      "razon": "Producto encontrado en lista del proveedor"
-    }
-  ]
-}
+IMPORTANTE: Responde ÚNICAMENTE con JSON válido y completo. Sin texto adicional, sin markdown, sin backticks.
+Limita las actualizaciones a máximo 15 productos y los nuevos a máximo 10 productos.
 
-Donde "confianza" puede ser: "alta", "media" o "baja" según qué tan seguro estás de la coincidencia.
-Si no hay actualizaciones o nuevos productos, usa arrays vacíos.`;
+Estructura exacta requerida:
+{"resumen":"texto breve","actualizaciones":[{"id":1,"name":"nombre","precio_actual":1000,"precio_sugerido":1200,"razon":"motivo","confianza":"alta"}],"nuevos":[{"name":"nombre","cat":"categoria","precio_sugerido":1000,"razon":"motivo"}]}`;
 
   try {
     iaLog('🌐 Llamando API de Gemini...');
