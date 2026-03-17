@@ -5,6 +5,90 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Cotizador – ELECTROBYTE IT S.A.S.</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet"/>
+<!-- Firebase SDK -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getFirestore, doc, getDoc, setDoc, collection, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDloP3Dx2dPLZr_SCWSuEInpyLmMBYbveM",
+    authDomain: "sistema-cotizaciones-eb.firebaseapp.com",
+    projectId: "sistema-cotizaciones-eb",
+    storageBucket: "sistema-cotizaciones-eb.firebasestorage.app",
+    messagingSenderId: "676000167156",
+    appId: "1:676000167156:web:bcfa6f8229ca1b34dd5aa1"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  // ---- Helpers Firebase ----
+  window.fbSaveCatalogo = async function(data){
+    try{ await setDoc(doc(db,'config','catalogo'),{items:data}); }catch(e){ console.error('fbSaveCatalogo',e); }
+  };
+  window.fbSaveHistorial = async function(data){
+    try{ await setDoc(doc(db,'config','historial'),{items:data}); }catch(e){ console.error('fbSaveHistorial',e); }
+  };
+  window.fbSaveApiKey = async function(k){
+    try{ await setDoc(doc(db,'config','settings'),{geminiKey:k},{merge:true}); }catch(e){ console.error('fbSaveApiKey',e); }
+  };
+  window.fbLoadAll = async function(){
+    try{
+      // Catálogo
+      var catSnap = await getDoc(doc(db,'config','catalogo'));
+      if(catSnap.exists()) window.catalogoProds = catSnap.data().items;
+      else window.catalogoProds = JSON.parse(JSON.stringify(window.DEFAULT_PRODS));
+
+      // Historial
+      var histSnap = await getDoc(doc(db,'config','historial'));
+      window.historial = histSnap.exists() ? histSnap.data().items : [];
+
+      // Settings (API Key Gemini)
+      var settSnap = await getDoc(doc(db,'config','settings'));
+      if(settSnap.exists() && settSnap.data().geminiKey){
+        var kEl = document.getElementById('ia-apikey');
+        if(kEl) kEl.value = settSnap.data().geminiKey;
+      }
+
+      window.updateHistCount();
+      window.renderProds(window.catalogoProds);
+      window.renderChips();
+      window.renderCatFull();
+      document.getElementById('sync-badge').style.display = 'inline-flex';
+      document.getElementById('sync-badge').textContent = '☁️ Sincronizado';
+    }catch(e){
+      console.error('fbLoadAll',e);
+      document.getElementById('sync-badge').style.display = 'inline-flex';
+      document.getElementById('sync-badge').style.background = '#fff0f0';
+      document.getElementById('sync-badge').style.color = '#c00';
+      document.getElementById('sync-badge').textContent = '⚠️ Sin conexión';
+      // Fallback localStorage
+      window.loadStorageFallback();
+    }
+  };
+
+  // Escuchar cambios en tiempo real (si otro dispositivo actualiza, se refleja)
+  onSnapshot(doc(db,'config','catalogo'), snap => {
+    if(snap.exists() && window._fbReady){
+      window.catalogoProds = snap.data().items;
+      window.renderProds(window.catalogoProds);
+      window.renderCatFull();
+    }
+  });
+  onSnapshot(doc(db,'config','historial'), snap => {
+    if(snap.exists() && window._fbReady){
+      window.historial = snap.data().items;
+      window.updateHistCount();
+      if(document.getElementById('panel-historial').classList.contains('active')) window.renderHistorial();
+    }
+  });
+
+  // Señal de que Firebase está listo
+  document.addEventListener('DOMContentLoaded', async ()=>{
+    await window.fbLoadAll();
+    window._fbReady = true;
+  });
+</script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Barlow',sans-serif;background:#f0f0ee;min-height:100vh;padding:16px}
@@ -121,6 +205,7 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--eb-red)}
       <div class="company-sub">Soluciones Integrales en Tecnología · NIT 900.853.102-8</div>
     </div>
     <div class="badge-cot">COTIZADOR</div>
+    <span id="sync-badge" style="display:none;font-size:10px;font-weight:600;padding:3px 8px;border-radius:4px;background:#eafaea;color:#2a9d2a;border:1px solid #b6e8b6;margin-left:6px">☁️ Sincronizado</span>
   </div>
   <div class="tabs">
     <div class="tab active" onclick="switchTab('nueva')">Nueva cotización</div>
@@ -263,7 +348,7 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--eb-red)}
   <div id="panel-historial" class="panel">
     <div class="section">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <div class="section-title" style="margin:0">Cotizaciones guardadas <span class="storage-badge">Guardado local</span></div>
+        <div class="section-title" style="margin:0">Cotizaciones guardadas <span class="storage-badge">☁️ Firebase Cloud</span></div>
         <button class="btn btn-outline" style="font-size:11px;padding:5px 10px" onclick="exportarTodo()">Exportar respaldo</button>
       </div>
       <div class="hist-list" id="hist-list"><div style="text-align:center;padding:32px;color:var(--eb-muted);font-size:13px">No hay cotizaciones guardadas aún</div></div>
@@ -300,12 +385,12 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--eb-red)}
       <div class="section-title">Configuración de API</div>
       <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
         <div style="flex:1;min-width:260px">
-          <label>API Key de Anthropic (Claude)</label>
-          <input type="password" id="ia-apikey" placeholder="sk-ant-api03-..." oninput="saveApiKey()" autocomplete="off"/>
+          <label>API Key de Google Gemini</label>
+          <input type="password" id="ia-apikey" placeholder="AIzaSy..." oninput="saveApiKey()" autocomplete="off"/>
         </div>
         <div style="font-size:11px;color:var(--eb-muted);padding-bottom:8px">
           Tu clave se guarda solo en este navegador y nunca sale al servidor.<br/>
-          <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--eb-red)">Obtener clave en console.anthropic.com →</a>
+          <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--eb-red)">Obtener clave gratis en Google AI Studio →</a>
         </div>
       </div>
     </div>
@@ -433,13 +518,23 @@ var condChips=['Precios no incluyen IVA','Servicio no incluye IVA','Trabajo en i
 
 function fmt(n){return '$'+Math.round(n).toLocaleString('es-CO');}
 function toast(msg,ok){var t=document.getElementById('toast');t.textContent=msg;t.style.background=(ok===false)?'#1A52B8':'#1a1a1a';t.classList.add('show');setTimeout(function(){t.classList.remove('show');},2600);}
-function loadStorage(){
+function saveCatalogo(){
+  if(window.fbSaveCatalogo) window.fbSaveCatalogo(catalogoProds);
+  try{ localStorage.setItem('eb_catalogo',JSON.stringify(catalogoProds)); }catch(e){}
+}
+function saveHistorial(){
+  if(window.fbSaveHistorial) window.fbSaveHistorial(historial);
+  try{ localStorage.setItem('eb_historial',JSON.stringify(historial)); }catch(e){}
+}
+function loadStorageFallback(){
   try{var c=localStorage.getItem('eb_catalogo');catalogoProds=c?JSON.parse(c):JSON.parse(JSON.stringify(DEFAULT_PRODS));}catch(e){catalogoProds=JSON.parse(JSON.stringify(DEFAULT_PRODS));}
   try{var h=localStorage.getItem('eb_historial');historial=h?JSON.parse(h):[];}catch(e){historial=[];}
   updateHistCount();renderProds(catalogoProds);renderChips();
 }
-function saveCatalogo(){try{localStorage.setItem('eb_catalogo',JSON.stringify(catalogoProds));}catch(e){}}
-function saveHistorial(){try{localStorage.setItem('eb_historial',JSON.stringify(historial));}catch(e){}}
+function loadStorage(){
+  // Firebase se encarga via fbLoadAll(), solo usamos localStorage como fallback inicial
+  loadStorageFallback();
+}
 function updateHistCount(){var b=document.getElementById('hist-count');if(historial.length>0){b.style.display='inline';b.textContent=historial.length;}else b.style.display='none';}
 function setFecha(){var d=new Date(),m=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];document.getElementById('cot-fecha').value=d.getDate()+' de '+m[d.getMonth()]+' de '+d.getFullYear();}
 function toggleCustom(sId,iId){var v=document.getElementById(sId).value;document.getElementById(iId).style.display=v===''?'block':'none';}
@@ -592,7 +687,7 @@ function loadFirmaFromStorage() {
 }
 
 
-// ========== MÓDULO IA: ACTUALIZACIÓN DE PRECIOS ==========
+// ========== MÓDULO IA: ACTUALIZACIÓN DE PRECIOS (Gemini) ==========
 var iaFileData = null;
 var iaFileType = null;
 var iaSugerencias = [];
@@ -600,9 +695,11 @@ var iaNuevos = [];
 
 function saveApiKey(){
   var k = document.getElementById('ia-apikey').value;
+  if(window.fbSaveApiKey) window.fbSaveApiKey(k);
   try { if(k) localStorage.setItem('eb_apikey', k); else localStorage.removeItem('eb_apikey'); } catch(e){}
 }
 function loadApiKey(){
+  // Firebase la carga via fbLoadAll(). Fallback localStorage:
   try { var k = localStorage.getItem('eb_apikey'); if(k) document.getElementById('ia-apikey').value = k; } catch(e){}
 }
 
@@ -614,11 +711,10 @@ function handleIaDrop(e){
 }
 function handleIaFile(f){
   if(!f) return;
-  var allowed = ['application/pdf','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/vnd.ms-excel'];
   var ext = f.name.split('.').pop().toLowerCase();
   if(!['pdf','xlsx','xls'].includes(ext)){toast('Solo se aceptan PDF y Excel (.xlsx, .xls)',false);return;}
   if(f.size > 10*1024*1024){toast('El archivo supera 10 MB',false);return;}
-  iaFileType = ext === 'pdf' ? 'pdf' : 'xlsx';
+  iaFileType = ext === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   var reader = new FileReader();
   reader.onload = function(e){
     iaFileData = e.target.result.split(',')[1]; // base64
@@ -655,15 +751,15 @@ function iaSetStatus(msg, loading){
 
 async function analizarConIA(){
   var apiKey = document.getElementById('ia-apikey').value.trim();
-  if(!apiKey){ toast('Ingresa tu API Key de Anthropic primero',false); return; }
+  if(!apiKey){ toast('Ingresa tu API Key de Gemini primero',false); return; }
   if(!iaFileData){ toast('Primero sube un archivo PDF o Excel',false); return; }
 
   document.getElementById('ia-resultados').style.display = 'none';
   document.getElementById('ia-log').textContent = '';
   document.getElementById('ia-log').style.display = 'block';
   document.getElementById('ia-analizar-btn').disabled = true;
-  iaSetStatus('Enviando documento a Claude...', true);
-  iaLog('▶ Iniciando análisis con Claude AI...');
+  iaSetStatus('Enviando documento a Gemini...', true);
+  iaLog('▶ Iniciando análisis con Google Gemini AI...');
   iaLog('📎 Archivo: ' + document.getElementById('ia-file-name').textContent);
   iaLog('📦 Productos en catálogo: ' + catalogoProds.length);
 
@@ -714,36 +810,34 @@ Donde "confianza" puede ser: "alta", "media" o "baja" según qué tan seguro est
 Si no hay actualizaciones o nuevos productos, usa arrays vacíos.`;
 
   try {
-    iaLog('🌐 Llamando API de Claude...');
+    iaLog('🌐 Llamando API de Gemini...');
+
     var body = {
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 4096,
-      messages: [{
-        role: 'user',
-        content: [
+      contents: [{
+        parts: [
           {
-            type: iaFileType === 'pdf' ? 'document' : 'document',
-            source: {
-              type: 'base64',
-              media_type: iaFileType === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            inline_data: {
+              mime_type: iaFileType,
               data: iaFileData
             }
           },
-          { type: 'text', text: prompt }
+          { text: prompt }
         ]
-      }]
+      }],
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 4096
+      }
     };
 
-    var resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify(body)
-    });
+    var resp = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' + apiKey,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      }
+    );
 
     if(!resp.ok){
       var err = await resp.json();
@@ -751,11 +845,18 @@ Si no hay actualizaciones o nuevos productos, usa arrays vacíos.`;
     }
 
     var data = await resp.json();
-    var rawText = data.content.map(function(b){ return b.type === 'text' ? b.text : ''; }).join('');
+
+    // Extraer texto de la respuesta de Gemini
+    var rawText = '';
+    if(data.candidates && data.candidates[0] && data.candidates[0].content){
+      rawText = data.candidates[0].content.parts.map(function(p){ return p.text || ''; }).join('');
+    }
+    if(!rawText) throw new Error('Gemini no devolvió contenido. Verifica tu API Key y el archivo.');
+
     iaLog('✅ Respuesta recibida (' + rawText.length + ' chars)');
     iaLog('🔍 Procesando resultados...');
 
-    // Limpiar posibles backticks o markdown
+    // Limpiar posibles backticks o markdown que Gemini a veces agrega
     var clean = rawText.replace(/```json|```/g,'').trim();
     var result = JSON.parse(clean);
 
@@ -773,7 +874,7 @@ Si no hay actualizaciones o nuevos productos, usa arrays vacíos.`;
   } catch(err){
     iaLog('❌ ERROR: ' + err.message);
     iaSetStatus('❌ Error: ' + err.message, false);
-    toast('Error al llamar la API: ' + err.message, false);
+    toast('Error al llamar Gemini: ' + err.message, false);
   } finally {
     document.getElementById('ia-analizar-btn').disabled = false;
   }
@@ -782,7 +883,7 @@ Si no hay actualizaciones o nuevos productos, usa arrays vacíos.`;
 function renderIaResultados(resumen){
   // Resumen
   var sumEl = document.getElementById('ia-summary');
-  if(resumen){ sumEl.style.display = 'block'; sumEl.innerHTML = '🤖 <strong>Análisis de Claude:</strong> ' + resumen; }
+  if(resumen){ sumEl.style.display = 'block'; sumEl.innerHTML = '🤖 <strong>Análisis de Gemini:</strong> ' + resumen; }
   else sumEl.style.display = 'none';
 
   // Tabla de actualizaciones
@@ -869,6 +970,17 @@ setFecha();
 loadStorage();
 loadFirmaFromStorage();
 loadApiKey();
+
+// Exponer funciones globalmente para el módulo Firebase
+window.catalogoProds = catalogoProds;
+window.historial = historial;
+window.DEFAULT_PRODS = DEFAULT_PRODS;
+window.updateHistCount = updateHistCount;
+window.renderProds = renderProds;
+window.renderChips = renderChips;
+window.renderCatFull = renderCatFull;
+window.renderHistorial = renderHistorial;
+window._fbReady = false;
 </script>
 </body>
 </html>
