@@ -98,6 +98,18 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--eb-red)}
 .prev-firma{margin-top:22px;font-weight:700;font-size:11px}
 .toast{position:fixed;bottom:22px;right:22px;background:#1a1a1a;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:500;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none}
 .toast.show{opacity:1}
+/* IA module styles */
+.ia-row{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 80px;gap:8px;align-items:center;padding:9px 10px;border-bottom:1px solid var(--eb-border);font-size:13px}
+.ia-row.header{font-size:11px;color:var(--eb-muted);font-weight:500;background:var(--eb-gray);border-radius:6px 6px 0 0}
+.ia-badge{display:inline-block;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600}
+.ia-badge.up{background:#fff3cd;color:#856404}
+.ia-badge.down{background:#d1f7e0;color:#166534}
+.ia-badge.same{background:#e9ecef;color:#555}
+.ia-badge.new{background:#cfe2ff;color:#084298}
+.ia-check{width:16px;height:16px;cursor:pointer;accent-color:var(--eb-red)}
+@media(max-width:600px){.ia-row{grid-template-columns:1fr 1fr;gap:4px}.ia-row .ia-col-name{grid-column:1/-1;font-weight:500}}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid #ccc;border-top-color:var(--eb-red);border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -106,7 +118,7 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--eb-red)}
     <div class="logo-box">ELEC<br>TRO</div>
     <div>
       <div class="company-name">ELECTROBYTE IT S.A.S.</div>
-      <div class="company-sub"> Soluciones Integrales en Tecnología · NIT 900.853.102-8</div>
+      <div class="company-sub">Soluciones Integrales en Tecnología · NIT 900.853.102-8</div>
     </div>
     <div class="badge-cot">COTIZADOR</div>
   </div>
@@ -114,6 +126,7 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--eb-red)}
     <div class="tab active" onclick="switchTab('nueva')">Nueva cotización</div>
     <div class="tab" onclick="switchTab('historial')">Historial <span id="hist-count" style="background:var(--eb-red);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:4px;display:none">0</span></div>
     <div class="tab" onclick="switchTab('catalogo')">Catálogo</div>
+    <div class="tab" onclick="switchTab('ia')">⚡ Actualizar precios con IA</div>
   </div>
 
   <div id="panel-nueva" class="panel active">
@@ -280,6 +293,88 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--eb-red)}
       <div id="cat-full-list"></div>
     </div>
   </div>
+
+  <!-- PANEL IA -->
+  <div id="panel-ia" class="panel">
+    <div class="section">
+      <div class="section-title">Configuración de API</div>
+      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+        <div style="flex:1;min-width:260px">
+          <label>API Key de Anthropic (Claude)</label>
+          <input type="password" id="ia-apikey" placeholder="sk-ant-api03-..." oninput="saveApiKey()" autocomplete="off"/>
+        </div>
+        <div style="font-size:11px;color:var(--eb-muted);padding-bottom:8px">
+          Tu clave se guarda solo en este navegador y nunca sale al servidor.<br/>
+          <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--eb-red)">Obtener clave en console.anthropic.com →</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Subir lista de precios del proveedor</div>
+      <p style="font-size:12px;color:var(--eb-muted);margin-bottom:14px">
+        Sube un <strong>PDF</strong> o <strong>Excel (.xlsx/.xls)</strong> con la lista de precios del proveedor.
+        La IA leerá el documento, identificará los productos que coincidan con tu catálogo y sugerirá actualizaciones de precio automáticamente.
+      </p>
+      <div id="ia-drop-zone" style="border:2px dashed var(--eb-border);border-radius:10px;padding:32px;text-align:center;cursor:pointer;transition:all .2s;background:var(--eb-gray)"
+           onclick="document.getElementById('ia-file-input').click()"
+           ondragover="event.preventDefault();this.style.borderColor='var(--eb-red)'"
+           ondragleave="this.style.borderColor='var(--eb-border)'"
+           ondrop="handleIaDrop(event)">
+        <div style="font-size:28px;margin-bottom:8px">📄</div>
+        <div style="font-size:13px;font-weight:600;color:var(--eb-text)">Arrastra aquí o haz clic para seleccionar</div>
+        <div style="font-size:11px;color:var(--eb-muted);margin-top:4px">PDF, Excel (.xlsx, .xls) — máx. 10 MB</div>
+      </div>
+      <input type="file" id="ia-file-input" accept=".pdf,.xlsx,.xls" style="display:none" onchange="handleIaFile(this.files[0])"/>
+      <div id="ia-file-info" style="display:none;margin-top:10px;padding:10px 14px;background:#f0f7ff;border:1px solid #c0d8f0;border-radius:7px;font-size:12px;display:flex;align-items:center;gap:10px">
+        <span style="font-size:20px">📎</span>
+        <div style="flex:1">
+          <div id="ia-file-name" style="font-weight:600"></div>
+          <div id="ia-file-size" style="color:var(--eb-muted)"></div>
+        </div>
+        <button class="btn btn-outline" style="font-size:11px;padding:4px 10px" onclick="clearIaFile()">Quitar</button>
+      </div>
+    </div>
+
+    <div class="section" id="ia-instrucciones-section">
+      <div class="section-title">Instrucción adicional (opcional)</div>
+      <textarea id="ia-instruccion" rows="2" placeholder="Ej: Solo actualizar precios de la categoría Telecomunicaciones. Aplicar margen del 20% sobre el precio del proveedor."></textarea>
+    </div>
+
+    <div class="actions" style="border-top:1px solid var(--eb-border)">
+      <button class="btn btn-primary" id="ia-analizar-btn" onclick="analizarConIA()">⚡ Analizar y sugerir precios</button>
+      <div id="ia-status" style="font-size:12px;color:var(--eb-muted);align-self:center;display:none">
+        <span id="ia-status-text"></span>
+      </div>
+    </div>
+
+    <!-- RESULTADOS -->
+    <div id="ia-resultados" style="display:none">
+      <div class="section">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <div class="section-title" style="margin:0">Sugerencias de la IA</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-outline" style="font-size:11px;padding:5px 10px" onclick="seleccionarTodos(true)">Seleccionar todos</button>
+            <button class="btn btn-outline" style="font-size:11px;padding:5px 10px" onclick="seleccionarTodos(false)">Deseleccionar todos</button>
+            <button class="btn btn-primary" onclick="aplicarCambios()">✅ Aplicar cambios seleccionados</button>
+          </div>
+        </div>
+        <div id="ia-summary" style="background:#f0f7ff;border:1px solid #c0d8f0;border-radius:7px;padding:10px 14px;font-size:12px;margin-bottom:12px;display:none"></div>
+        <div id="ia-tabla-resultados"></div>
+      </div>
+
+      <div class="section" id="ia-nuevos-section" style="display:none">
+        <div class="section-title">Productos nuevos detectados por la IA</div>
+        <p style="font-size:12px;color:var(--eb-muted);margin-bottom:10px">Estos productos aparecen en la lista del proveedor pero no están en tu catálogo. Selecciona cuáles agregar.</p>
+        <div id="ia-nuevos-tabla"></div>
+        <div style="margin-top:10px">
+          <button class="btn btn-secondary" onclick="agregarNuevosSeleccionados()">➕ Agregar productos nuevos seleccionados</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="ia-log" style="display:none;margin:0 20px 20px;background:#1a1a1a;color:#7fff7f;border-radius:8px;padding:14px;font-family:monospace;font-size:11px;max-height:140px;overflow-y:auto;white-space:pre-wrap"></div>
+  </div>
 </div>
 
 <div class="modal-overlay" id="preview-modal">
@@ -382,7 +477,7 @@ function recalc(){
 }
 function renderChips(){document.getElementById('chips').innerHTML=condChips.map(function(ch){return '<div class="chip" onclick="addChip(\''+ch.replace(/'/g,"\\'")+'\')">' +ch+'</div>';}).join('');}
 function addChip(t){var ta=document.getElementById('cot-cond'),cur=ta.value.trim();ta.value=(cur?(cur.endsWith('.')?cur+' ':cur+'. '):'')+t+'.';}
-function switchTab(tab){document.querySelectorAll('.tab').forEach(function(t,i){t.classList.toggle('active',['nueva','historial','catalogo'][i]===tab);});document.querySelectorAll('.panel').forEach(function(p){p.classList.remove('active');});document.getElementById('panel-'+tab).classList.add('active');if(tab==='historial')renderHistorial();if(tab==='catalogo')renderCatFull();}
+function switchTab(tab){document.querySelectorAll('.tab').forEach(function(t,i){t.classList.toggle('active',['nueva','historial','catalogo','ia'][i]===tab);});document.querySelectorAll('.panel').forEach(function(p){p.classList.remove('active');});document.getElementById('panel-'+tab).classList.add('active');if(tab==='historial')renderHistorial();if(tab==='catalogo')renderCatFull();}
 function getCotNum(){return document.getElementById('cot-num').value||'--';}
 function buildPrev(){
   var sub=items.reduce(function(s,it){return s+it.qty*it.price;},0);
@@ -496,9 +591,284 @@ function loadFirmaFromStorage() {
   } catch(ex) {}
 }
 
+
+// ========== MÓDULO IA: ACTUALIZACIÓN DE PRECIOS ==========
+var iaFileData = null;
+var iaFileType = null;
+var iaSugerencias = [];
+var iaNuevos = [];
+
+function saveApiKey(){
+  var k = document.getElementById('ia-apikey').value;
+  try { if(k) localStorage.setItem('eb_apikey', k); else localStorage.removeItem('eb_apikey'); } catch(e){}
+}
+function loadApiKey(){
+  try { var k = localStorage.getItem('eb_apikey'); if(k) document.getElementById('ia-apikey').value = k; } catch(e){}
+}
+
+function handleIaDrop(e){
+  e.preventDefault();
+  document.getElementById('ia-drop-zone').style.borderColor = 'var(--eb-border)';
+  var f = e.dataTransfer.files[0];
+  if(f) handleIaFile(f);
+}
+function handleIaFile(f){
+  if(!f) return;
+  var allowed = ['application/pdf','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/vnd.ms-excel'];
+  var ext = f.name.split('.').pop().toLowerCase();
+  if(!['pdf','xlsx','xls'].includes(ext)){toast('Solo se aceptan PDF y Excel (.xlsx, .xls)',false);return;}
+  if(f.size > 10*1024*1024){toast('El archivo supera 10 MB',false);return;}
+  iaFileType = ext === 'pdf' ? 'pdf' : 'xlsx';
+  var reader = new FileReader();
+  reader.onload = function(e){
+    iaFileData = e.target.result.split(',')[1]; // base64
+    document.getElementById('ia-drop-zone').style.display = 'none';
+    var fi = document.getElementById('ia-file-info');
+    fi.style.display = 'flex';
+    document.getElementById('ia-file-name').textContent = f.name;
+    document.getElementById('ia-file-size').textContent = (f.size/1024).toFixed(1) + ' KB';
+  };
+  reader.readAsDataURL(f);
+}
+function clearIaFile(){
+  iaFileData = null; iaFileType = null;
+  document.getElementById('ia-drop-zone').style.display = 'block';
+  document.getElementById('ia-file-info').style.display = 'none';
+  document.getElementById('ia-file-input').value = '';
+  document.getElementById('ia-resultados').style.display = 'none';
+  document.getElementById('ia-log').style.display = 'none';
+}
+
+function iaLog(msg){
+  var el = document.getElementById('ia-log');
+  el.style.display = 'block';
+  el.textContent += msg + '\n';
+  el.scrollTop = el.scrollHeight;
+}
+function iaSetStatus(msg, loading){
+  var el = document.getElementById('ia-status');
+  var txt = document.getElementById('ia-status-text');
+  if(!msg){ el.style.display = 'none'; return; }
+  el.style.display = 'flex';
+  txt.innerHTML = (loading ? '<span class="spinner"></span>' : '') + msg;
+}
+
+async function analizarConIA(){
+  var apiKey = document.getElementById('ia-apikey').value.trim();
+  if(!apiKey){ toast('Ingresa tu API Key de Anthropic primero',false); return; }
+  if(!iaFileData){ toast('Primero sube un archivo PDF o Excel',false); return; }
+
+  document.getElementById('ia-resultados').style.display = 'none';
+  document.getElementById('ia-log').textContent = '';
+  document.getElementById('ia-log').style.display = 'block';
+  document.getElementById('ia-analizar-btn').disabled = true;
+  iaSetStatus('Enviando documento a Claude...', true);
+  iaLog('▶ Iniciando análisis con Claude AI...');
+  iaLog('📎 Archivo: ' + document.getElementById('ia-file-name').textContent);
+  iaLog('📦 Productos en catálogo: ' + catalogoProds.length);
+
+  var instrExtra = document.getElementById('ia-instruccion').value.trim();
+  var catalogoStr = JSON.stringify(catalogoProds.map(function(p){return {id:p.id, name:p.name, cat:p.cat, price:p.price};}));
+
+  var prompt = `Eres un asistente especializado en actualización de catálogos de precios para una empresa de tecnología e IT en Colombia llamada ELECTROBYTE IT S.A.S.
+
+Se te proporciona:
+1. El catálogo actual de productos de la empresa (JSON)
+2. Un documento de lista de precios de un proveedor (puede ser PDF o Excel)
+
+CATÁLOGO ACTUAL:
+${catalogoStr}
+
+TU TAREA:
+- Analiza el documento del proveedor
+- Identifica qué productos del documento coinciden (exacta o aproximadamente) con productos del catálogo actual
+- Para cada coincidencia, sugiere si el precio debe actualizarse
+- También identifica productos NUEVOS en el documento que no están en el catálogo
+
+${instrExtra ? 'INSTRUCCIÓN ADICIONAL DEL USUARIO: ' + instrExtra : ''}
+
+RESPONDE ÚNICAMENTE con un objeto JSON válido con esta estructura exacta (sin texto adicional, sin markdown, sin backticks):
+{
+  "resumen": "Texto breve explicando lo encontrado en el documento",
+  "actualizaciones": [
+    {
+      "id": 1,
+      "name": "Nombre del producto en catálogo",
+      "precio_actual": 2800,
+      "precio_sugerido": 3200,
+      "razon": "Precio encontrado en lista del proveedor",
+      "confianza": "alta"
+    }
+  ],
+  "nuevos": [
+    {
+      "name": "Nombre del producto nuevo",
+      "cat": "Categoría sugerida",
+      "precio_sugerido": 45000,
+      "razon": "Producto encontrado en lista del proveedor"
+    }
+  ]
+}
+
+Donde "confianza" puede ser: "alta", "media" o "baja" según qué tan seguro estás de la coincidencia.
+Si no hay actualizaciones o nuevos productos, usa arrays vacíos.`;
+
+  try {
+    iaLog('🌐 Llamando API de Claude...');
+    var body = {
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4096,
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: iaFileType === 'pdf' ? 'document' : 'document',
+            source: {
+              type: 'base64',
+              media_type: iaFileType === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              data: iaFileData
+            }
+          },
+          { type: 'text', text: prompt }
+        ]
+      }]
+    };
+
+    var resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify(body)
+    });
+
+    if(!resp.ok){
+      var err = await resp.json();
+      throw new Error((err.error && err.error.message) || ('HTTP ' + resp.status));
+    }
+
+    var data = await resp.json();
+    var rawText = data.content.map(function(b){ return b.type === 'text' ? b.text : ''; }).join('');
+    iaLog('✅ Respuesta recibida (' + rawText.length + ' chars)');
+    iaLog('🔍 Procesando resultados...');
+
+    // Limpiar posibles backticks o markdown
+    var clean = rawText.replace(/```json|```/g,'').trim();
+    var result = JSON.parse(clean);
+
+    iaSugerencias = result.actualizaciones || [];
+    iaNuevos = result.nuevos || [];
+
+    iaLog('📊 Actualizaciones sugeridas: ' + iaSugerencias.length);
+    iaLog('🆕 Productos nuevos detectados: ' + iaNuevos.length);
+
+    renderIaResultados(result.resumen);
+    iaSetStatus('✅ Análisis completado', false);
+    document.getElementById('ia-resultados').style.display = 'block';
+    document.getElementById('ia-resultados').scrollIntoView({behavior:'smooth'});
+
+  } catch(err){
+    iaLog('❌ ERROR: ' + err.message);
+    iaSetStatus('❌ Error: ' + err.message, false);
+    toast('Error al llamar la API: ' + err.message, false);
+  } finally {
+    document.getElementById('ia-analizar-btn').disabled = false;
+  }
+}
+
+function renderIaResultados(resumen){
+  // Resumen
+  var sumEl = document.getElementById('ia-summary');
+  if(resumen){ sumEl.style.display = 'block'; sumEl.innerHTML = '🤖 <strong>Análisis de Claude:</strong> ' + resumen; }
+  else sumEl.style.display = 'none';
+
+  // Tabla de actualizaciones
+  var tabla = document.getElementById('ia-tabla-resultados');
+  if(!iaSugerencias.length){
+    tabla.innerHTML = '<div style="text-align:center;padding:24px;color:var(--eb-muted);font-size:13px">No se detectaron coincidencias de precios en el documento.</div>';
+  } else {
+    var rows = iaSugerencias.map(function(s, i){
+      var diff = s.precio_sugerido - s.precio_actual;
+      var pct = s.precio_actual > 0 ? ((diff/s.precio_actual)*100).toFixed(1) : 0;
+      var badge = diff > 0 ? '<span class="ia-badge up">▲ +'+pct+'%</span>' : diff < 0 ? '<span class="ia-badge down">▼ '+pct+'%</span>' : '<span class="ia-badge same">Sin cambio</span>';
+      var confColor = s.confianza === 'alta' ? '#166534' : s.confianza === 'media' ? '#856404' : '#842029';
+      return '<div class="ia-row">'
+        + '<div class="ia-col-name"><strong>'+s.name+'</strong><br><span style="font-size:11px;color:var(--eb-muted)">'+s.razon+'</span><br><span style="font-size:10px;color:'+confColor+'">Confianza: '+s.confianza+'</span></div>'
+        + '<div>'+fmt(s.precio_actual)+'</div>'
+        + '<div style="font-weight:600">'+fmt(s.precio_sugerido)+'</div>'
+        + '<div>'+badge+'</div>'
+        + '<div style="text-align:center"><input type="checkbox" class="ia-check" id="ia-chk-'+i+'" checked/></div>'
+        + '</div>';
+    }).join('');
+    tabla.innerHTML = '<div class="ia-row header"><div>Producto</div><div>Precio actual</div><div>Precio sugerido</div><div>Variación</div><div style="text-align:center">Aplicar</div></div>' + rows;
+  }
+
+  // Productos nuevos
+  var nuevosSection = document.getElementById('ia-nuevos-section');
+  var nuevosTabla = document.getElementById('ia-nuevos-tabla');
+  if(iaNuevos.length){
+    nuevosSection.style.display = 'block';
+    var nrows = iaNuevos.map(function(n, i){
+      return '<div class="ia-row">'
+        + '<div class="ia-col-name"><strong>'+n.name+'</strong><br><span style="font-size:11px;color:var(--eb-muted)">'+n.razon+'</span></div>'
+        + '<div>'+n.cat+'</div>'
+        + '<div style="font-weight:600">'+fmt(n.precio_sugerido)+'</div>'
+        + '<div><span class="ia-badge new">NUEVO</span></div>'
+        + '<div style="text-align:center"><input type="checkbox" class="ia-check" id="ia-new-'+i+'" checked/></div>'
+        + '</div>';
+    }).join('');
+    nuevosTabla.innerHTML = '<div class="ia-row header"><div>Producto</div><div>Categoría</div><div>Precio sugerido</div><div>Estado</div><div style="text-align:center">Agregar</div></div>' + nrows;
+  } else {
+    nuevosSection.style.display = 'none';
+  }
+}
+
+function seleccionarTodos(val){
+  iaSugerencias.forEach(function(_,i){ var c=document.getElementById('ia-chk-'+i); if(c) c.checked=val; });
+}
+
+function aplicarCambios(){
+  var cambios = 0;
+  iaSugerencias.forEach(function(s, i){
+    var chk = document.getElementById('ia-chk-'+i);
+    if(chk && chk.checked){
+      var prod = catalogoProds.find(function(p){ return p.id === s.id; });
+      if(prod){ prod.price = s.precio_sugerido; cambios++; }
+    }
+  });
+  if(!cambios){ toast('Ningún cambio seleccionado',false); return; }
+  saveCatalogo();
+  filterProds();
+  toast('✅ ' + cambios + ' precio(s) actualizado(s) en el catálogo');
+  iaLog('💾 ' + cambios + ' precio(s) aplicado(s) al catálogo.');
+}
+
+function agregarNuevosSeleccionados(){
+  var agregados = 0;
+  iaNuevos.forEach(function(n, i){
+    var chk = document.getElementById('ia-new-'+i);
+    if(chk && chk.checked){
+      var nid = Math.max.apply(null, [0].concat(catalogoProds.map(function(p){ return p.id; }))) + 1;
+      catalogoProds.push({ id: nid, name: n.name, cat: n.cat, price: n.precio_sugerido });
+      agregados++;
+    }
+  });
+  if(!agregados){ toast('Ningún producto seleccionado',false); return; }
+  saveCatalogo();
+  filterProds();
+  toast('✅ ' + agregados + ' producto(s) agregado(s) al catálogo');
+  iaLog('➕ ' + agregados + ' producto(s) nuevo(s) agregado(s).');
+  document.getElementById('ia-nuevos-section').style.display = 'none';
+}
+// ========== FIN MÓDULO IA ==========
+
 setFecha();
 loadStorage();
 loadFirmaFromStorage();
+loadApiKey();
 </script>
 </body>
 </html>
