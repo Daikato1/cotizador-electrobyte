@@ -771,15 +771,19 @@ async function analizarConIA(){
 CATÁLOGO ACTUAL (JSON):
 ${catalogoStr}
 
-TAREA: Analiza el documento del proveedor adjunto e identifica coincidencias con el catálogo.
+TAREA: Analiza el documento del proveedor adjunto.
 
 ${instrExtra ? 'INSTRUCCIÓN ADICIONAL: ' + instrExtra : ''}
 
-IMPORTANTE: Responde ÚNICAMENTE con JSON válido y completo. Sin texto adicional, sin markdown, sin backticks.
-Limita las actualizaciones a máximo 15 productos y los nuevos a máximo 10 productos.
+REGLAS ESTRICTAS:
+- Devuelve MÁXIMO 8 actualizaciones (las más importantes)
+- Devuelve MÁXIMO 5 productos nuevos (los más relevantes)
+- Cada campo "razon" máximo 50 caracteres
+- Cada campo "name" máximo 40 caracteres
+- El campo "resumen" máximo 100 caracteres
 
-Estructura exacta requerida:
-{"resumen":"texto breve","actualizaciones":[{"id":1,"name":"nombre","precio_actual":1000,"precio_sugerido":1200,"razon":"motivo","confianza":"alta"}],"nuevos":[{"name":"nombre","cat":"categoria","precio_sugerido":1000,"razon":"motivo"}]}`;
+Responde ÚNICAMENTE con este JSON minificado sin espacios ni saltos de línea:
+{"resumen":"...","actualizaciones":[{"id":0,"name":"...","precio_actual":0,"precio_sugerido":0,"razon":"...","confianza":"alta"}],"nuevos":[{"name":"...","cat":"...","precio_sugerido":0,"razon":"..."}]}`;
 
   try {
     iaLog('🌐 Llamando API de Gemini...');
