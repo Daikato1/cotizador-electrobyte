@@ -854,6 +854,7 @@ Si no hay actualizaciones o nuevos productos, usa arrays vacíos.`;
     if(!rawText) throw new Error('Gemini no devolvió contenido. Verifica tu API Key y el archivo.');
 
     iaLog('✅ Respuesta recibida (' + rawText.length + ' chars)');
+    iaLog('📝 Respuesta cruda: ' + rawText.substring(0, 500));
     iaLog('🔍 Procesando resultados...');
 
     // Limpiar posibles backticks o markdown que Gemini a veces agrega
