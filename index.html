@@ -385,12 +385,12 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--eb-red)}
       <div class="section-title">Configuración de API</div>
       <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
         <div style="flex:1;min-width:260px">
-          <label>API Key de Google Gemini</label>
-          <input type="password" id="ia-apikey" placeholder="AIzaSy..." oninput="saveApiKey()" autocomplete="off"/>
+          <label>API Key de Anthropic (Claude)</label>
+          <input type="password" id="ia-apikey" placeholder="sk-ant-api03-..." oninput="saveApiKey()" autocomplete="off"/>
         </div>
         <div style="font-size:11px;color:var(--eb-muted);padding-bottom:8px">
-          Tu clave se guarda solo en este navegador y nunca sale al servidor.<br/>
-          <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--eb-red)">Obtener clave gratis en Google AI Studio →</a>
+          Tu clave se guarda en Firebase y nunca sale al servidor.<br/>
+          <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--eb-red)">Obtener clave en console.anthropic.com →</a>
         </div>
       </div>
     </div>
@@ -687,7 +687,7 @@ function loadFirmaFromStorage() {
 }
 
 
-// ========== MÓDULO IA: ACTUALIZACIÓN DE PRECIOS (Gemini) ==========
+// ========== MÓDULO IA: ACTUALIZACIÓN DE PRECIOS (Claude - Anthropic) ==========
 var iaFileData = null;
 var iaFileType = null;
 var iaSugerencias = [];
@@ -758,8 +758,8 @@ async function analizarConIA(){
   document.getElementById('ia-log').textContent = '';
   document.getElementById('ia-log').style.display = 'block';
   document.getElementById('ia-analizar-btn').disabled = true;
-  iaSetStatus('Enviando documento a Gemini...', true);
-  iaLog('▶ Iniciando análisis con Google Gemini AI...');
+  iaSetStatus('Enviando documento a Claude...', true);
+  iaLog('▶ Iniciando análisis con Claude AI...');
   iaLog('📎 Archivo: ' + document.getElementById('ia-file-name').textContent);
   iaLog('📦 Productos en catálogo: ' + catalogoProds.length);
 
@@ -771,49 +771,47 @@ async function analizarConIA(){
 CATÁLOGO ACTUAL (JSON):
 ${catalogoStr}
 
-TAREA: Analiza el documento del proveedor adjunto.
+TAREA: Analiza el documento del proveedor adjunto e identifica coincidencias con el catálogo.
 
 ${instrExtra ? 'INSTRUCCIÓN ADICIONAL: ' + instrExtra : ''}
 
-REGLAS ESTRICTAS:
-- Devuelve MÁXIMO 8 actualizaciones (las más importantes)
-- Devuelve MÁXIMO 5 productos nuevos (los más relevantes)
-- Cada campo "razon" máximo 50 caracteres
-- Cada campo "name" máximo 40 caracteres
-- El campo "resumen" máximo 100 caracteres
+RESPONDE ÚNICAMENTE con un objeto JSON válido con esta estructura exacta (sin texto adicional, sin markdown, sin backticks):
+{"resumen":"texto breve","actualizaciones":[{"id":1,"name":"nombre producto catálogo","precio_actual":1000,"precio_sugerido":1200,"razon":"motivo corto","confianza":"alta"}],"nuevos":[{"name":"nombre","cat":"categoria","precio_sugerido":1000,"razon":"motivo corto"}]}
 
-Responde ÚNICAMENTE con este JSON minificado sin espacios ni saltos de línea:
-{"resumen":"...","actualizaciones":[{"id":0,"name":"...","precio_actual":0,"precio_sugerido":0,"razon":"...","confianza":"alta"}],"nuevos":[{"name":"...","cat":"...","precio_sugerido":0,"razon":"..."}]}`;
+Donde "confianza" puede ser: "alta", "media" o "baja".
+Si no hay actualizaciones o nuevos productos, usa arrays vacíos.`;
 
   try {
-    iaLog('🌐 Llamando API de Gemini...');
-
+    iaLog('🌐 Llamando API de Claude...');
     var body = {
-      contents: [{
-        parts: [
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4096,
+      messages: [{
+        role: 'user',
+        content: [
           {
-            inline_data: {
-              mime_type: iaFileType,
+            type: 'document',
+            source: {
+              type: 'base64',
+              media_type: iaFileType,
               data: iaFileData
             }
           },
-          { text: prompt }
+          { type: 'text', text: prompt }
         ]
-      }],
-      generationConfig: {
-        temperature: 0.1,
-        maxOutputTokens: 8192
-      }
+      }]
     };
 
-    var resp = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-001:generateContent?key=' + apiKey,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      }
-    );
+    var resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify(body)
+    });
 
     if(!resp.ok){
       var err = await resp.json();
@@ -821,13 +819,7 @@ Responde ÚNICAMENTE con este JSON minificado sin espacios ni saltos de línea:
     }
 
     var data = await resp.json();
-
-    // Extraer texto de la respuesta de Gemini
-    var rawText = '';
-    if(data.candidates && data.candidates[0] && data.candidates[0].content){
-      rawText = data.candidates[0].content.parts.map(function(p){ return p.text || ''; }).join('');
-    }
-    if(!rawText) throw new Error('Gemini no devolvió contenido. Verifica tu API Key y el archivo.');
+    var rawText = data.content.map(function(b){ return b.type === 'text' ? b.text : ''; }).join('');
 
     iaLog('✅ Respuesta recibida (' + rawText.length + ' chars)');
     iaLog('🔍 Procesando resultados...');
@@ -854,7 +846,7 @@ Responde ÚNICAMENTE con este JSON minificado sin espacios ni saltos de línea:
   } catch(err){
     iaLog('❌ ERROR: ' + err.message);
     iaSetStatus('❌ Error: ' + err.message, false);
-    toast('Error al llamar Gemini: ' + err.message, false);
+    toast('Error al llamar la API de Claude: ' + err.message, false);
   } finally {
     document.getElementById('ia-analizar-btn').disabled = false;
   }
@@ -863,7 +855,7 @@ Responde ÚNICAMENTE con este JSON minificado sin espacios ni saltos de línea:
 function renderIaResultados(resumen){
   // Resumen
   var sumEl = document.getElementById('ia-summary');
-  if(resumen){ sumEl.style.display = 'block'; sumEl.innerHTML = '🤖 <strong>Análisis de Gemini:</strong> ' + resumen; }
+  if(resumen){ sumEl.style.display = 'block'; sumEl.innerHTML = '🤖 <strong>Análisis de Claude:</strong> ' + resumen; }
   else sumEl.style.display = 'none';
 
   // Tabla de actualizaciones
